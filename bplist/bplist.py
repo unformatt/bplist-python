@@ -28,27 +28,27 @@ class BPListWriter(object):
     def __init__(self, objects):
         self.bplist = ""
         self.objects = objects
-    
+
     def binary(self):
         '''binary -> string
-        
+
         Generates bplist
         '''
         self.data = 'bplist00'
-        
+
         # TODO: flatten objects and count max length size
-        
+
         # TODO: write objects and save offsets
-        
+
         # TODO: write offsets
-        
+
         # TODO: write metadata
-        
+
         return self.data
-    
+
     def write(self, filename):
         '''
-        
+
         Writes bplist to file
         '''
         if self.bplist != "":
@@ -62,10 +62,18 @@ class BPListReader(object):
         self.data = s
         self.objects = []
         self.resolved = {}
-    
+
+    def __getObjHeader(self, offset):
+        obj_header = self.data[offset]
+
+        if type(obj_header) == str:
+            obj_header = ord(obj_header)
+
+        return obj_header
+
     def __unpackIntStruct(self, sz, s):
         '''__unpackIntStruct(size, string) -> int
-        
+
         Unpacks the integer of given size (1, 2 or 4 bytes) from string
         '''
         if   sz == 1:
@@ -79,27 +87,27 @@ class BPListReader(object):
         else:
             raise Exception('int unpack size '+str(sz)+' unsupported')
         return struct.unpack(ot, s)[0]
-    
+
     def __unpackInt(self, offset):
         '''__unpackInt(offset) -> int
-        
+
         Unpacks int field from plist at given offset
         '''
         return self.__unpackIntMeta(offset)[1]
 
     def __unpackIntMeta(self, offset):
         '''__unpackIntMeta(offset) -> (size, int)
-        
+
         Unpacks int field from plist at given offset and returns its size and value
         '''
-        obj_header = self.data[offset]
+        obj_header = self.__getObjHeader(offset)
         obj_type, obj_info = (obj_header & 0xF0), (obj_header & 0x0F)
         int_sz = 2**obj_info
         return int_sz, self.__unpackIntStruct(int_sz, self.data[offset+1:offset+1+int_sz])
 
     def __resolveIntSize(self, obj_info, offset):
         '''__resolveIntSize(obj_info, offset) -> (count, offset)
-        
+
         Calculates count of objref* array entries and returns count and offset to first element
         '''
         if obj_info == 0x0F:
@@ -112,7 +120,7 @@ class BPListReader(object):
 
     def __unpackFloatStruct(self, sz, s):
         '''__unpackFloatStruct(size, string) -> float
-        
+
         Unpacks the float of given size (4 or 8 bytes) from string
         '''
         if   sz == 4:
@@ -125,10 +133,10 @@ class BPListReader(object):
 
     def __unpackFloat(self, offset):
         '''__unpackFloat(offset) -> float
-        
+
         Unpacks float field from plist at given offset
         '''
-        obj_header = self.data[offset]
+        obj_header = self.__getObjHeader(offset)
         obj_type, obj_info = (obj_header & 0xF0), (obj_header & 0x0F)
         int_sz = 2**obj_info
         return int_sz, self.__unpackFloatStruct(int_sz, self.data[offset+1:offset+1+int_sz])
@@ -139,10 +147,10 @@ class BPListReader(object):
 
     def __unpackItem(self, offset):
         '''__unpackItem(offset)
-        
+
         Unpacks and returns an item from plist
         '''
-        obj_header = self.data[offset]
+        obj_header = self.__getObjHeader(offset)
         obj_type, obj_info = (obj_header & 0xF0), (obj_header & 0x0F)
         if   obj_type == 0x00:
             if   obj_info == 0x00: # null   0000 0000
@@ -198,7 +206,7 @@ class BPListReader(object):
             return dic
         else:
             raise Exception('don\'t know how to unpack obj type '+hex(obj_type)+' at '+str(offset))
-    
+
     def __resolveObject(self, idx):
         try:
             return self.resolved[idx]
@@ -225,16 +233,16 @@ class BPListReader(object):
             else:
                 self.resolved[idx] = obj
                 return obj
-    
+
     def parse(self):
         # read header
         if self.data[:8] != b'bplist00':
             raise Exception('Bad magic')
-        
+
         # read trailer
         self.offset_size, self.object_ref_size, self.number_of_objects, self.top_object, self.table_offset = struct.unpack('!6xBB4xI4xI4xI', self.data[-32:])
         #print "** plist offset_size:",self.offset_size,"objref_size:",self.object_ref_size,"num_objs:",self.number_of_objects,"top:",self.top_object,"table_ofs:",self.table_offset
-        
+
         # read offset table
         self.offset_table = self.data[self.table_offset:-32]
         self.offsets = []
@@ -244,7 +252,7 @@ class BPListReader(object):
             ot = ot[self.offset_size:]
             self.offsets.append(self.__unpackIntStruct(self.offset_size, offset_entry))
         #print "** plist offsets:",self.offsets
-        
+
         # read object table
         self.objects = []
         k = 0
@@ -253,14 +261,14 @@ class BPListReader(object):
             #print "** plist unpacked",k,type(obj),obj,"at",i
             k += 1
             self.objects.append(obj)
-        
+
         # rebuild object tree
         #for i in range(len(self.objects)):
         #    self.__resolveObject(i)
-        
+
         # return root object
         return self.__resolveObject(self.top_object)
-    
+
     @classmethod
     def plistWithString(cls, s):
         parser = cls(s)
